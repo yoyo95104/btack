@@ -24,6 +24,8 @@ add_executable(bt_attack
     jam.c
     hid.c
     mitm.c
+    sdp.c
+    a.c
 )
 target_link_libraries(bt_attack
     PRIVATE
