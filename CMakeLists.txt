@@ -19,9 +19,11 @@ add_library(packet_manipulator
 )
 add_executable(bt_attack
     main.c
-    attack.c
-    threads.c
-    scan.c  
+    sniff.c
+    scan.c 
+    jam.c
+    hid.c
+    mitm.c
 )
 target_link_libraries(bt_attack
     PRIVATE
@@ -32,3 +34,4 @@ target_link_libraries(bt_attack
 
 target_compile_definitions(bt_attack PRIVATE USING_CXX=1)
 target_include_directories(bt_attack PRIVATE include)
+install(TARGETS bt_attack DESTINATION bin)
